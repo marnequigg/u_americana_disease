@@ -1,3 +1,7 @@
+####here I used a locally downloaded nucleotide database from NCBI
+####you don't need to just add the -remote option in the blast command to run it on the NCBI servers
+
+
 cd /data/labs/Fant/Quigg/03c.alignment_diseases+elm/redo_missing_samples
 conda activate blast
 
