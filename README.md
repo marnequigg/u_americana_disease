@@ -10,5 +10,13 @@ For this, I used a custom amplicon panel that targets regions from American elm 
 ### Trimming
 I trimmed the reads with Trimmomatic. The code for this is available on the other GitHub project for American elm.
 
+### NCBI Nucleotide Database
+I used a locally downloaded NCBI Nucleotide Database. I did this to standardize which version of the database is used for the entirety of the project. It is an unbelievably large file, so unless you have extensive storage, I would recommend just using the remote option and running Blastn remotely on NCBI's servers. It took multiple days to download the database
+
 ## Step 1) Align to Reference
-The associated script with this step is 01.align.sh and 01b.execute_alignment.sh. Here, I mapped the reads to both the American elm genome and the disease gene regions. Trials revealed that a lot of the reads originating from the American elm genome were mapping to the disease genes, so I opted to align to both to mitigate the misalignments. I concatenated them together and aligned the reads with BWA. Then the resulting sam file is converted to bam and sorted. Flagstat files are generated for a quality check, then sam files are sorted. The sam files can be deleted, they won't be used again. To run multiple files in parallel, use script 01b to run multiple samples at the same time. If not, just execute script 01.
+The associated script with this step is 01.align.sh and 01b.execute_alignment.sh. Here, I mapped the reads to both the American elm genome and the disease gene regions. I concatenated them together and aligned the reads with BWA. Trials revealed that a lot of the reads originating from the American elm genome were mapping to the disease genes, so I opted to align to both to mitigate the misalignments. Then the resulting sam file is converted to bam and sorted. Flagstat files are generated for a quality check, then sam files are sorted. The sam files can be deleted, they won't be used again. To run multiple files in parallel, use script 01b to run multiple samples at the same time. If not, just execute script 01 using whatever method is preferred.
+
+## Step 2) Assemble Contigs
+Here we run the script 02.assemble_contigs.sh. This subsets the reads originating from the diseases and converts the file to a fastq with samtools. Then, the reads are assembled into longer contigs with MegaHit. Finally, it runs Blastn to identify the origin of the contigs. 
+
+## Step 3) Identify Infections
