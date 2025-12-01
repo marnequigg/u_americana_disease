@@ -1,0 +1,159 @@
+---
+title: "blast_analysis"
+author: "m quigg"
+date: "2025-12-01"
+output: html_document
+---
+# Who's infected???
+Soooooo, I decided to split into "high" and "low" confidence infections because blast is weird.
+
+high= one or more Blast hits matching the genus of the disease
+low= one or more hits matching the family of the of the disease
+
+## Import all of the files
+```{r}
+####import data####
+setwd("C:/Users/mquig/Desktop/DED/Data_analysis/disease")
+disease=read.csv("final_all_counts_by_individual.csv", header = T)
+coords=read.csv("samples_and_coords.csv", header = F)
+year=read.csv("samples_and_year.csv", header = T)
+```
+
+## Take a trip to the library
+This script is easy, all we need is tidyverse.
+```{r, include=FALSE}
+####library####
+#install.packages("tidyverse")
+library(tidyverse)
+```
+
+## Quick organization
+```{r}
+###data organization
+coords=coords %>% 
+  rename("Sample"=V1) %>% 
+  rename("Lat"=V2) %>% 
+  rename("Long"=V3)
+
+year=year %>% 
+  rename("Sample"=ind) %>% 
+  rename("Year"=year)
+```
+
+## Time to make a dataframe for GIS!
+I want a dataframe with a column with "high", "low", or "uninfected" for each disease per individual. I also want a column for coinfections, so I can map that too. It also needs to have the year each tree was sampled, and the coordinates.
+
+I exported the csv file and mapped it in ArcGIS.
+```{r}
+###infection status
+classified_df <- disease %>%
+  mutate(
+    DED = case_when(
+      Ophiostomataceae >= 1 & Ophiostoma >= 1 & ulmi >= 1 ~ "high",
+      Ophiostomataceae >= 1 & ulmi == 0 ~ "low",
+      TRUE ~ "uninfected"
+    ),
+    Phyto = case_when(
+      Acholeplasmataceae >= 1 & Phytoplasma >= 1 ~ "high",
+      Acholeplasmataceae >= 1 & Phytoplasma == 0 ~ "low",
+      TRUE ~ "uninfected"
+    ),
+    MalS = case_when(
+      Leptosphaeriaceae >= 1 & Plenodomus >= 1 ~ "high",
+      Leptosphaeriaceae >= 1 & Plenodomus == 0 ~ "low",
+      TRUE ~ "uninfected"
+    )
+  ) %>%
+  select(Sample, DED, Phyto, MalS)
+
+###now calculate the number of each infection
+sum(classified_df$DED=="high")
+num_positive= classified_df %>% 
+  summarise(DED_high   = sum(DED == "high"),
+            Phyto_high = sum(Phyto == "high"),
+            MalS_high  = sum(MalS == "high"), 
+            DED_low    = sum(DED == "low"),
+            Phyto_low  = sum(Phyto == "low"),
+            MalS_low   = sum(MalS == "low"))
+
+###add the coords and year info
+for_GIS=left_join(classified_df, coords, by = "Sample")
+for_GIS=left_join(for_GIS, year, by = "Sample")
+for_GIS=for_GIS %>% 
+  filter(!is.na(Lat))
+for_GIS
+str(for_GIS)
+
+###make one column with the coinfections
+all_infections <- for_GIS %>%
+  mutate(
+    infection_status = case_when(
+      DED %in% c("high", "low") & Phyto %in% c("high", "low") & MalS %in% c("high", "low") ~ "DED/Phytoplasma/MalSecco",
+      DED %in% c("high", "low") & Phyto %in% c("high", "low") ~ "DED/Phytoplasma",
+      DED %in% c("high", "low") & MalS %in% c("high", "low") ~ "DED/MalSecco",
+      Phyto %in% c("high", "low") & MalS %in% c("high", "low") ~ "Phytoplasma/MalSecco",
+      DED %in% c("high", "low") ~ "DED",
+      Phyto %in% c("high", "low") ~ "Phytoplasma",
+      MalS %in% c("high", "low") ~ "MalSecco",
+      TRUE ~ "uninfected"
+    )
+  )
+
+write.csv(all_infections, "C:/Users/mquig/Desktop/DED/Data_analysis/disease/all_infections_status_final.csv")
+```
+
+## Oldest Infections
+I want to know the earliest record of infections based on this dataset.
+```{r}
+###identify oldest infection
+##DED
+DED_pos=for_GIS %>% 
+  filter(DED!="uninfected")
+min(DED_pos$Year)
+#1903
+
+##phyto
+phyto_pos=for_GIS %>% 
+  filter(Phyto!="uninfected")
+min(phyto_pos$Year)
+#1897
+
+##MalS
+MalS_pos=for_GIS %>% 
+  filter(MalS!="uninfected")
+min(MalS_pos$Year)
+#1897
+```
+
+## Coinfections
+Apparently, very little is known about coinfections. I want to check and see if any of these trees are infected with 2+ diseases at once.
+```{r}
+##DED and phytoplasma
+DED_phyto=for_GIS %>% 
+  filter(DED!="uninfected") %>% 
+  filter(Phyto!="uninfected")
+nrow(DED_phyto)
+#11 co-infections
+
+##DED and MalS
+DED_MalS=for_GIS %>% 
+  filter(DED!="uninfected") %>% 
+  filter(MalS!="uninfected")
+nrow(DED_MalS)
+#40 co-infection
+
+##Phyto and MalS
+Phyto_MalS=for_GIS %>% 
+  filter(MalS!="uninfected") %>% 
+  filter(Phyto!="uninfected")
+nrow(Phyto_MalS)
+#11
+
+##all 3
+all_three=for_GIS %>% 
+  filter(DED!="uninfected") %>% 
+  filter(Phyto!="uninfected") %>% 
+  filter(MalS!="unifected")
+nrow(all_three)
+#11
+```
