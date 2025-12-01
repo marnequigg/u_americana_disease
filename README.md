@@ -29,8 +29,8 @@ Now it's time to run script 03.map_taxa.sh. You can do this the slow way by inpu
 ## Step 4) Identify Infections
 Almost done! Now, it is time to run script 04.identify_infections.R. In this script, I had to build a personal R library directory. Then you have two options, you can either open R on whatever server you are using then run it line-by-line, or you can make a nano R script and run it all at once. Either way, first you download the necessary packages. Most of them are available within tidyverse. Then it loops through each file and scans the taxonomy files for the target families and genera. It calculates the number of occurrences of the target family or genera present per individual and outputs a csv file. 
 
-## Step 5) Final analysis
+### Final analysis
 This is the last step that involves scripts and coding, yay! Here, I have script 05.disease_analysis.Rmd. This is an R markdown file, so you can download this and open it in Rstudio, thaat way you can just press the play button and each code chunk will run. There is code to make a big csv file to import to whatever mapping software (ArcGIS, qGIS, etc.). The csv includes "low", "high", or "uninfected" for each disease, as well as the coinfections. It also includes the coordinates and year the tree was sampled from. There is also code to identify the oldest infection in the dataset per disease, and the number of coinfections.
 
-## Step 6) Map it!
+### Map it!
 I used ArcGIS to map the infections across the landscape, but it is possible to use any sort of mapping software.
