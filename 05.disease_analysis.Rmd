@@ -102,6 +102,39 @@ all_infections <- for_GIS %>%
 write.csv(all_infections, "C:/Users/mquig/Desktop/DED/Data_analysis/disease/all_infections_status_final.csv")
 ```
 
+## Number of Infections
+```{r}
+###DED
+DED_infected=classified_df %>% 
+  filter(DED != "uninfected")
+nrow(DED_infected)
+#64
+##make csv for mapping
+DED_infected_map=all_infections %>% 
+  filter(DED != "uninfected")
+write.csv(DED_infected_map, "C:/Users/mquig/Desktop/DED/Data_analysis/disease/DED_final.csv")
+
+###Phytoplasma
+phyto_infected=classified_df %>% 
+  filter(Phyto != "uninfected")
+nrow(phyto_infected)
+#24
+##make csv for mapping
+phyto_infected_map=all_infections %>% 
+  filter(Phyto != "uninfected")
+write.csv(phyto_infected_map, "C:/Users/mquig/Desktop/DED/Data_analysis/disease/phyto_final.csv")
+
+###Mal Secco
+malsecco_infected=classified_df %>% 
+  filter(MalS != "uninfected")
+nrow(malsecco_infected)
+#135
+##make csv for mapping
+mals_infected_map=all_infections %>% 
+  filter(MalS != "uninfected")
+write.csv(mals_infected_map, "C:/Users/mquig/Desktop/DED/Data_analysis/disease/malsecco_final.csv")
+```
+
 ## Oldest Infections
 I want to know the earliest record of infections based on this dataset.
 ```{r}
@@ -157,3 +190,4 @@ all_three=for_GIS %>%
 nrow(all_three)
 #11
 ```
+
