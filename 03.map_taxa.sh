@@ -1,3 +1,7 @@
+#download the taxonomy database (check to make sure this is the updated link, I did this in September 2025)
+wget ftp://ftp.ncbi.nlm.nih.gov/pub/taxonomy/taxdump.tar.gz
+tar -xvzf taxdump.tar.gz
+
 #organize the files into their own folders
 mkdir 04.subset_bams
 mv /data/labs/Fant/Quigg/03c.alignment_diseases+elm/redo_missing_samples/02.sorted_bams/*_subset.bam /data/labs/Fant/Quigg/03c.alignment_diseases+elm/redo_missing_samples/04.subset_bams
