@@ -62,8 +62,7 @@ classified_df <- disease %>%
       Leptosphaeriaceae >= 1 & Plenodomus >= 1 ~ "high",
       Leptosphaeriaceae >= 1 & Plenodomus == 0 ~ "low",
       TRUE ~ "uninfected"
-    )
-  ) %>%
+    )) %>%
   select(Sample, DED, Phyto, MalS)
 
 ###now calculate the number of each infection
@@ -205,12 +204,12 @@ cumulative_infect <- all_infections %>%
     DED   = ifelse(DED %in% c("high","low"), 1, 0),
     ElmYellows = ifelse(Phyto %in% c("high","low"), 1, 0),
     MalSecco  = ifelse(MalS %in% c("high","low"), 1, 0),
-    #Total = 1   # every sample counts toward cumulative total
+    Total = 1   # every sample counts toward cumulative total
   )
 
 ### convert to long format
 cumulative_long <- cumulative_infect %>%
-  select(Year, DED, ElmYellows, MalSecco) %>%
+  select(Year, DED, ElmYellows, MalSecco, Total) %>%
   pivot_longer(cols = -Year, names_to = "Disease", values_to = "Infected")
 
 ### calculate the infections
@@ -225,9 +224,9 @@ cumulative_df <- cumulative_long %>%
 ggplot(cumulative_df, aes(x = Year, y = cumulative, color = Disease)) +
   geom_line(size = 1) +
   #geom_point(size = 2) +
-  scale_color_manual(values = c("purple4", "cornflowerblue", "springgreen4")) +
+  scale_color_manual(values = c("purple4", "cornflowerblue", "springgreen4", "grey70")) +
   xlim(1890, 2025) +
-  ylim(0, 150) +
+  ylim(0, 550) +
   labs(
     #title = "Cumulative Infections Over Time",
     x = "Year",
@@ -297,7 +296,123 @@ ggplot(percent_graph, aes(x = Year, y = percent_infected, color = Disease)) +
     legend.background = element_rect(fill = "white", color = "black")) +
   scale_color_manual(values = c("purple4", "springgreen4", "cornflowerblue"))
 ```
+After showing this graph to some people, they don't like it. Everyone thinks we need to somehow show the number of samples. 
 
+###Stacked bar plot for each disease
+The main recommendation was a stacked barplot over time. The years would have to be binned, so that is challenge #1. The other challenge is the coinfections. Jeremie recommended that I do one graph for each disease, then put it in the figure along the maps.
+
+I don't think I'm going to like the outcome, but let's try it.
+
+####DED
+```{r}
+###make the binned dataframe
+binned_20yr <- cumsum_diseases2 %>%
+  mutate(
+    Year_bin = case_when(
+      Year >= 1842 & Year <= 1860 ~ "1842-1860",
+      Year >= 1861 & Year <= 1880 ~ "1861-1880",
+      Year >= 1881 & Year <= 1900 ~ "1881-1900",
+      Year >= 1901 & Year <= 1920 ~ "1901-1920",
+      Year >= 1921 & Year <= 1940 ~ "1921-1940",
+      Year >= 1941 & Year <= 1960 ~ "1941-1960",
+      Year >= 1961 & Year <= 1980 ~ "1961-1980",
+      Year >= 1981 & Year <= 2000 ~ "1981-2000",
+      Year >= 2000 & Year <= 2020 ~ "2000-2020",
+      Year >= 2020 & Year <= 2024 ~ "2020-2024")) %>%
+  group_by(Year_bin) %>%
+  summarise(
+    sum_DED   = sum(sum_DED),
+    sum_EY    = sum(sum_EY),
+    sum_MalS  = sum(sum_MalS),
+    num_samples = sum(num_samples),
+    .groups = "drop"
+  )
+
+###DED
+##make dataframe
+DED_binned=binned_20yr %>% 
+  mutate(num_uninfected=num_samples - sum_DED) %>% 
+  select(Year_bin, sum_DED, num_uninfected) %>% 
+  rename(infected=sum_DED) %>% 
+  rename(uninfected=num_uninfected) %>% 
+  rename(Year=Year_bin)
+##pivot longer
+DED_binned_long <- DED_binned %>%
+  pivot_longer(
+    cols = c(uninfected, infected),
+    names_to = "Category",
+    values_to = "Count")
+##plot it
+ggplot(DED_binned_long, aes(x = Year, y = Count, fill = Category)) +
+  geom_bar(stat = "identity", position = "stack") +
+  scale_fill_manual(
+    values = c("uninfected" = "grey70", "infected" = "purple4")) +
+  labs(
+    x = "Year of Sample Collection",
+    y = "Number of Samples") +
+  theme_classic() +
+  theme(axis.text.x = element_text(angle = 45, hjust = 1),
+        legend.position = c(0.05, 0.95),
+        legend.justification = c("left", "top"),
+        legend.background = element_rect(fill = "white", color = "black"))
+
+###elm yellows
+##make dataframe
+EY_binned=binned_20yr %>% 
+  mutate(num_uninfected=num_samples - sum_EY) %>% 
+  select(Year_bin, sum_EY, num_uninfected) %>% 
+  rename(infected=sum_EY) %>% 
+  rename(uninfected=num_uninfected) %>% 
+  rename(Year=Year_bin)
+##pivot longer
+EY_binned_long <- EY_binned %>%
+  pivot_longer(
+    cols = c(uninfected, infected),
+    names_to = "Category",
+    values_to = "Count")
+##plot it
+ggplot(EY_binned_long, aes(x = Year, y = Count, fill = Category)) +
+  geom_bar(stat = "identity", position = "stack") +
+  scale_fill_manual(
+    values = c("uninfected" = "grey70", "infected" = "springgreen4")) +
+  labs(
+    x = "Year of Sample Collection",
+    y = "Number of Samples") +
+  theme_classic() +
+  theme(axis.text.x = element_text(angle = 45, hjust = 1),
+        legend.position = c(0.05, 0.95),
+        legend.justification = c("left", "top"),
+        legend.background = element_rect(fill = "white", color = "black"))
+
+###mal secco
+##make dataframe
+MalS_binned=binned_20yr %>% 
+  mutate(num_uninfected=num_samples - sum_MalS) %>% 
+  select(Year_bin, sum_MalS, num_uninfected) %>% 
+  rename(infected=sum_MalS) %>% 
+  rename(uninfected=num_uninfected) %>% 
+  rename(Year=Year_bin)
+##pivot longer
+MalS_binned_long <- MalS_binned %>%
+  pivot_longer(
+    cols = c(uninfected, infected),
+    names_to = "Category",
+    values_to = "Count")
+##plot it
+ggplot(MalS_binned_long, aes(x = Year, y = Count, fill = Category)) +
+  geom_bar(stat = "identity", position = "stack") +
+  scale_fill_manual(
+    values = c("uninfected" = "grey70", "infected" = "cornflowerblue")) +
+  labs(
+    x = "Year of Sample Collection",
+    y = "Number of Samples") +
+  theme_classic() +
+  theme(axis.text.x = element_text(angle = 45, hjust = 1),
+        legend.position = c(0.05, 0.95),
+        legend.justification = c("left", "top"),
+        legend.background = element_rect(fill = "white", color = "black"))
+```
+I was right... I hate this :)
 
 ## Coinfections
 Apparently, very little is known about coinfections. I want to check and see if any of these trees are infected with 2+ diseases at once.
