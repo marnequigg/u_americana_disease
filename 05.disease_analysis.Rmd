@@ -84,6 +84,25 @@ for_GIS=for_GIS %>%
 for_GIS
 str(for_GIS)
 
+###add the ploidy info
+tetras=read.csv("cluster1_4n.csv", header = T)
+diploids=read.csv("cluster2_other.csv", header = T)
+##add a column that lists the ploidy
+tetras=tetras %>% 
+  mutate(ploidy="4") %>% 
+  rename(Sample = "ind")
+diploids=diploids %>% 
+  mutate(ploidy="2") %>% 
+  rename(Sample = "ind")
+##stack the files on top of each other
+ploidy=rbind(tetras, diploids)
+##combine with the big dataset
+for_GIS=left_join(for_GIS, ploidy, by = "Sample")
+
+###remove individuals with unknown ploidy and missing coords
+for_GIS=for_GIS %>% 
+  na.omit(ploidy)
+
 ###make one column with the coinfections
 all_infections <- for_GIS %>%
   mutate(
@@ -99,40 +118,60 @@ all_infections <- for_GIS %>%
     )
   )
 
-write.csv(all_infections, "C:/Users/mquig/Desktop/DED/Data_analysis/disease/all_infections_status_final.csv")
+#write.csv(all_infections, "C:/Users/mquig/Desktop/DED/Data_analysis/disease/all_infections_status_final.csv")
 ```
-
 ## Number of Infections
 ```{r}
 ###DED
-DED_infected=classified_df %>% 
+DED_infected=all_infections %>% 
   filter(DED != "uninfected")
 nrow(DED_infected)
-#64
+#57
 ##make csv for mapping
 DED_infected_map=all_infections %>% 
   filter(DED != "uninfected")
-write.csv(DED_infected_map, "C:/Users/mquig/Desktop/DED/Data_analysis/disease/DED_final.csv")
+#write.csv(DED_infected_map, "C:/Users/mquig/Desktop/DED/Data_analysis/disease/DED_final.csv")
 
 ###Phytoplasma
-phyto_infected=classified_df %>% 
+phyto_infected=all_infections %>% 
   filter(Phyto != "uninfected")
 nrow(phyto_infected)
-#24
+#22
 ##make csv for mapping
 phyto_infected_map=all_infections %>% 
   filter(Phyto != "uninfected")
-write.csv(phyto_infected_map, "C:/Users/mquig/Desktop/DED/Data_analysis/disease/phyto_final.csv")
+#write.csv(phyto_infected_map, "C:/Users/mquig/Desktop/DED/Data_analysis/disease/phyto_final.csv")
 
 ###Mal Secco
-malsecco_infected=classified_df %>% 
+malsecco_infected=all_infections %>% 
   filter(MalS != "uninfected")
 nrow(malsecco_infected)
-#135
+#121
 ##make csv for mapping
 mals_infected_map=all_infections %>% 
   filter(MalS != "uninfected")
-write.csv(mals_infected_map, "C:/Users/mquig/Desktop/DED/Data_analysis/disease/malsecco_final.csv")
+#write.csv(mals_infected_map, "C:/Users/mquig/Desktop/DED/Data_analysis/disease/malsecco_final.csv")
+```
+### High vs. low confidence infections
+```{r}
+###DED
+##high
+sum(DED_infected$DED=="high")
+#3
+sum(DED_infected$DED=="low")
+#54
+
+##phyto
+sum(phyto_infected$Phyto=="high")
+#21
+sum(phyto_infected$Phyto=="low")
+#1
+
+##malsecco
+sum(malsecco_infected$MalS=="high")
+#116
+sum(malsecco_infected$MalS=="low")
+#5
 ```
 
 ## Oldest Infections
@@ -149,7 +188,7 @@ min(DED_pos$Year)
 phyto_pos=for_GIS %>% 
   filter(Phyto!="uninfected")
 min(phyto_pos$Year)
-#1897
+#1909
 
 ##MalS
 MalS_pos=for_GIS %>% 
@@ -157,6 +196,108 @@ MalS_pos=for_GIS %>%
 min(MalS_pos$Year)
 #1897
 ```
+
+### Cumulative number of infections over time
+```{r}
+### cumulative dataframe
+cumulative_infect <- all_infections %>%
+  mutate(
+    DED   = ifelse(DED %in% c("high","low"), 1, 0),
+    ElmYellows = ifelse(Phyto %in% c("high","low"), 1, 0),
+    MalSecco  = ifelse(MalS %in% c("high","low"), 1, 0),
+    #Total = 1   # every sample counts toward cumulative total
+  )
+
+### convert to long format
+cumulative_long <- cumulative_infect %>%
+  select(Year, DED, ElmYellows, MalSecco) %>%
+  pivot_longer(cols = -Year, names_to = "Disease", values_to = "Infected")
+
+### calculate the infections
+cumulative_df <- cumulative_long %>%
+  group_by(Disease, Year) %>%
+  summarise(count = sum(Infected), .groups = "drop") %>%
+  group_by(Disease) %>%
+  arrange(Year) %>%
+  mutate(cumulative = cumsum(count))
+
+### graph it
+ggplot(cumulative_df, aes(x = Year, y = cumulative, color = Disease)) +
+  geom_line(size = 1) +
+  #geom_point(size = 2) +
+  scale_color_manual(values = c("purple4", "cornflowerblue", "springgreen4")) +
+  xlim(1890, 2025) +
+  ylim(0, 150) +
+  labs(
+    #title = "Cumulative Infections Over Time",
+    x = "Year",
+    y = "Cumulative Number of Infected Individuals") +
+  theme_classic() +
+  theme(
+    legend.position = c(0.035, 0.95),   # relative coordinates (x, y) inside plot
+    legend.justification = c("left", "top"),
+    legend.background = element_rect(fill = "white", color = "black") # box around legend
+  )
+```
+###Cumulative percentage of infected individuals over time
+So today I presented at the Hipp lab meeting, and there were some concerns with this graph. Which is understandable, I thought the platau was weird too. Now, I'm going to try it again and see if anything changes.
+```{r}
+all_infections$Year=as.numeric(all_infections$Year)
+cumsum_diseases=all_infections %>% 
+   mutate(
+    DED   = ifelse(DED   %in% c("high","low"), 1, 0),
+    ElmYellows = ifelse(Phyto %in% c("high","low"), 1, 0),
+    MalSecco  = ifelse(MalS  %in% c("high","low"), 1, 0)) %>% 
+  arrange(Year) %>% 
+  mutate(num_samples = 1) 
+
+cumsum_diseases2=cumsum_diseases %>% 
+  arrange(Year) %>% 
+  group_by(Year) %>%
+  summarise(
+    sum_DED = sum(DED),
+    sum_EY  = sum(ElmYellows),
+    sum_MalS = sum(MalSecco),
+    num_samples = sum(num_samples),
+    .groups = "drop")
+
+cumsum_diseases3=cumsum_diseases2 %>% 
+  mutate(cumsum_DED=cumsum(sum_DED)) %>% 
+  mutate(cumsum_EY=cumsum(sum_EY)) %>% 
+  mutate(cumsum_MalS=cumsum(sum_MalS)) %>% 
+  mutate(num_samples = cumsum(num_samples)) %>% 
+  select(Year, cumsum_DED, cumsum_EY, cumsum_MalS, num_samples)
+
+percent_infect=cumsum_diseases3 %>% 
+  mutate(DED=(cumsum_DED/num_samples)*100) %>% 
+  mutate(ElmYellows=(cumsum_EY/num_samples)*100) %>% 
+  mutate(MalSecco=(cumsum_MalS/num_samples)*100) %>% 
+  select(Year, DED, ElmYellows, MalSecco)
+
+percent_graph=percent_infect %>% 
+  pivot_longer(
+    cols = c(DED, ElmYellows, MalSecco),
+    names_to = "Disease",
+    values_to = "percent_infected"
+  )
+
+ggplot(percent_graph, aes(x = Year, y = percent_infected, color = Disease)) +
+    geom_vline(xintercept = c(1930, 1880, 2024), color = c("purple4", "springgreen4", "cornflowerblue"), linetype = "dashed", linewidth = 1) +
+  geom_line(linewidth = 1.2) +
+  #geom_point(size = 2) +
+  labs(
+    #title = "Cumulative percentage of infected individuals over time",
+    x = "Year of Sample Collection",
+    y = "Cumulative percentage of Infected Individuals") +
+  theme_classic() +
+  #ylim(0, 31) +
+  theme(
+    legend.position = c(0.05, 0.95),
+    legend.justification = c("left", "top"),
+    legend.background = element_rect(fill = "white", color = "black")) +
+  scale_color_manual(values = c("purple4", "springgreen4", "cornflowerblue"))
+```
+
 
 ## Coinfections
 Apparently, very little is known about coinfections. I want to check and see if any of these trees are infected with 2+ diseases at once.
@@ -190,4 +331,70 @@ all_three=for_GIS %>%
 nrow(all_three)
 #11
 ```
+## Incorportate ploidy
+I also want to look at how disease is present across each ploidy.
+```{r}
+###make dataframes for each cytotype
+diploid_infections= all_infections %>% 
+  filter(ploidy == "2")
 
+polyploid_infections= all_infections %>% 
+  filter(ploidy == "4")
+```
+### Number of infections
+```{r}
+####diploids
+###DED
+diploid_DED_infected=diploid_infections %>% 
+  filter(DED != "uninfected")
+nrow(diploid_DED_infected)
+#9
+sum(diploid_DED_infected$DED=="high")
+sum(diploid_DED_infected$DED=="low")
+
+###phyto
+diploid_phyto_infected=diploid_infections %>% 
+  filter(Phyto != "uninfected")
+nrow(diploid_phyto_infected)
+#2
+sum(diploid_phyto_infected$Phyto=="high")
+sum(diploid_phyto_infected$Phyto=="low")
+
+###mal secco
+###DED
+diploid_mals_infected=diploid_infections %>% 
+  filter(MalS != "uninfected")
+nrow(diploid_mals_infected)
+#17
+sum(diploid_mals_infected$MalS=="high")
+sum(diploid_mals_infected$MalS=="low")
+
+```
+
+```{r}
+####polyploid
+###DED
+polyploid_DED_infected=polyploid_infections %>% 
+  filter(DED != "uninfected")
+nrow(polyploid_DED_infected)
+#48
+sum(polyploid_DED_infected$DED=="high")
+sum(polyploid_DED_infected$DED=="low")
+
+###phyto
+polyploid_phyto_infected=polyploid_infections %>% 
+  filter(Phyto != "uninfected")
+nrow(polyploid_phyto_infected)
+#20
+sum(polyploid_phyto_infected$Phyto=="high")
+sum(polyploid_phyto_infected$Phyto=="low")
+
+###mal secco
+###DED
+polyploid_mals_infected=polyploid_infections %>% 
+  filter(MalS != "uninfected")
+nrow(polyploid_mals_infected)
+#104
+sum(polyploid_mals_infected$MalS=="high")
+sum(polyploid_mals_infected$MalS=="low")
+```
