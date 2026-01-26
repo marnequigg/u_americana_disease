@@ -23,6 +23,8 @@ The associated script with this step is 01.align.sh and 01b.execute_alignment.sh
 ## Step 2) Assemble Contigs
 Here we run the script 02.assemble_contigs.sh. This subsets the reads originating from the diseases and converts the file to a fastq with samtools. Then, the reads are assembled into longer contigs with MegaHit. Finally, it runs Blastn to identify the origin of the contigs. It retains the top 10 hits per contig.
 
+*note from re-running the whole pipeline: It seems like mega-hit will use all available threads/cores. Also, this technique to run Blast uses all of the available memory.
+
 ## Step 3) Map Taxonomy
 Now it's time to run script 03.map_taxa.sh. You can do this the slow way by inputting the accessions into the online Blast database, but this script is a lot faster. This references the locally downloaded taxonomy database associated with the Blast results. There is code in the script to download this database, but I recommend checking to make sure that link is still active. First, I organize all of my files into their respective folders. Then, it extracts the TaxIDs (which are the Blast accessions) and compares them to the taxonomy database. Finally, it reformats the taxonomy string. 
 
