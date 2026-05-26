@@ -15,7 +15,7 @@ low= one or more hits matching the family of the of the disease
 ####import data####
 setwd("C:/Users/mquig/Desktop/DED/Data_analysis/disease")
 disease=read.csv("final_all_counts_by_individual.csv", header = T)
-coords=read.csv("samples_and_coords.csv", header = F)
+coords=read.csv("master_list_NA_updated.csv", header = T)
 year=read.csv("samples_and_year.csv", header = T)
 ```
 
@@ -31,20 +31,28 @@ library(tidyverse)
 ```{r}
 ###data organization
 coords=coords %>% 
-  rename("Sample"=V1) %>% 
-  rename("Lat"=V2) %>% 
-  rename("Long"=V3)
+  select(c(Sample.ID, Lat.NA_corrected., Long.NA_corrected.)) %>% 
+  rename("Sample"=Sample.ID) %>% 
+  rename("Lat"=Lat.NA_corrected.) %>% 
+  rename("Long"=Long.NA_corrected.)
 
 year=year %>% 
   rename("Sample"=ind) %>% 
   rename("Year"=year)
 ```
 
+##Remove TS09's DED detection
+So the phylogney revealed that there were no reads matching to the DED genes from TS09, so I'm considering this a false-detection. It has one Ophiostoma and one Ophiostomatacae so I want to edit those directly.
+```{r}
+disease[508, 3] = 0
+disease[508, 4] = 0
+```
+
 ## Time to make a dataframe for GIS!
 I want a dataframe with a column with "high", "low", or "uninfected" for each disease per individual. I also want a column for coinfections, so I can map that too. It also needs to have the year each tree was sampled, and the coordinates.
 
 I exported the csv file and mapped it in ArcGIS.
-```{r}
+```{r, include=FALSE}
 ###infection status
 classified_df <- disease %>%
   mutate(
@@ -84,23 +92,16 @@ for_GIS
 str(for_GIS)
 
 ###add the ploidy info
-tetras=read.csv("cluster1_4n.csv", header = T)
-diploids=read.csv("cluster2_other.csv", header = T)
-##add a column that lists the ploidy
-tetras=tetras %>% 
-  mutate(ploidy="4") %>% 
-  rename(Sample = "ind")
-diploids=diploids %>% 
-  mutate(ploidy="2") %>% 
-  rename(Sample = "ind")
-##stack the files on top of each other
-ploidy=rbind(tetras, diploids)
+ploidy=read.csv("C:/Users/mquig/Desktop/DED/Data_analysis/disease/ELM_spreadsheet - ploidy_results.csv", header = T)
+##rename  the column
+ploidy=ploidy %>% rename("Sample" = Sample_ID)
 ##combine with the big dataset
 for_GIS=left_join(for_GIS, ploidy, by = "Sample")
 
 ###remove individuals with unknown ploidy and missing coords
 for_GIS=for_GIS %>% 
-  na.omit(ploidy)
+  na.omit(ploidy) %>% 
+  filter(ploidy != "other")
 
 ###make one column with the coinfections
 all_infections <- for_GIS %>%
@@ -113,23 +114,22 @@ all_infections <- for_GIS %>%
       DED %in% c("high", "low") ~ "DED",
       Phyto %in% c("high", "low") ~ "Phytoplasma",
       MalS %in% c("high", "low") ~ "MalSecco",
-      TRUE ~ "uninfected"
-    )
-  )
+      TRUE ~ "uninfected"))
 
-#write.csv(all_infections, "C:/Users/mquig/Desktop/DED/Data_analysis/disease/all_infections_status_final.csv")
+#write.csv(all_infections, "C:/Users/mquig/Desktop/DED/Data_analysis/disease/updated_NA_locations/all_infections_status_final_NAupdate.csv")
 ```
+
 ## Number of Infections
 ```{r}
 ###DED
 DED_infected=all_infections %>% 
   filter(DED != "uninfected")
 nrow(DED_infected)
-#57
+#56
 ##make csv for mapping
 DED_infected_map=all_infections %>% 
   filter(DED != "uninfected")
-#write.csv(DED_infected_map, "C:/Users/mquig/Desktop/DED/Data_analysis/disease/DED_final.csv")
+#write.csv(DED_infected_map, "C:/Users/mquig/Desktop/DED/Data_analysis/disease/updated_NA_locations/DED_final.csv")
 
 ###Phytoplasma
 phyto_infected=all_infections %>% 
@@ -139,18 +139,38 @@ nrow(phyto_infected)
 ##make csv for mapping
 phyto_infected_map=all_infections %>% 
   filter(Phyto != "uninfected")
-#write.csv(phyto_infected_map, "C:/Users/mquig/Desktop/DED/Data_analysis/disease/phyto_final.csv")
+#write.csv(phyto_infected_map, "C:/Users/mquig/Desktop/DED/Data_analysis/disease/updated_NA_locations/phyto_final.csv")
 
 ###Mal Secco
 malsecco_infected=all_infections %>% 
   filter(MalS != "uninfected")
 nrow(malsecco_infected)
-#121
+#123
 ##make csv for mapping
 mals_infected_map=all_infections %>% 
   filter(MalS != "uninfected")
-#write.csv(mals_infected_map, "C:/Users/mquig/Desktop/DED/Data_analysis/disease/malsecco_final.csv")
+#write.csv(mals_infected_map, "C:/Users/mquig/Desktop/DED/Data_analysis/disease/updated_NA_locations/malsecco_final.csv")
 ```
+##Total number of infections/coinfections/tri-infections
+```{r}
+sum(all_infections$infection_status=="uninfected")
+#385
+sum(all_infections$infection_status=="DED")
+#13
+sum(all_infections$infection_status=="DED/Phytoplasma")
+#4
+sum(all_infections$infection_status=="Phytoplasma")
+#7
+sum(all_infections$infection_status=="Phytoplasma/MalSecco")
+#4
+sum(all_infections$infection_status=="MalSecco")
+#80
+sum(all_infections$infection_status=="DED/MalSecco")
+#32
+sum(all_infections$infection_status=="DED/Phytoplasma/MalSecco")
+#7
+```
+
 ### High vs. low confidence infections
 ```{r}
 ###DED
@@ -158,7 +178,7 @@ mals_infected_map=all_infections %>%
 sum(DED_infected$DED=="high")
 #3
 sum(DED_infected$DED=="low")
-#54
+#53
 
 ##phyto
 sum(phyto_infected$Phyto=="high")
@@ -168,7 +188,7 @@ sum(phyto_infected$Phyto=="low")
 
 ##malsecco
 sum(malsecco_infected$MalS=="high")
-#116
+#118
 sum(malsecco_infected$MalS=="low")
 #5
 ```
@@ -415,7 +435,7 @@ ggplot(MalS_binned_long, aes(x = Year, y = Count, fill = Category)) +
 I was right... I hate this :)
 
 ## Coinfections
-Apparently, very little is known about coinfections. I want to check and see if any of these trees are infected with 2+ diseases at once.
+Apparently, very little is known about coinfections. I want to check and see if any of these trees are infected with 2+ diseases at once. *this is not correct*
 ```{r}
 ##DED and phytoplasma
 DED_phyto=for_GIS %>% 
@@ -451,10 +471,10 @@ I also want to look at how disease is present across each ploidy.
 ```{r}
 ###make dataframes for each cytotype
 diploid_infections= all_infections %>% 
-  filter(ploidy == "2")
+  filter(ploidy == "2n")
 
 polyploid_infections= all_infections %>% 
-  filter(ploidy == "4")
+  filter(ploidy == "4n")
 ```
 ### Number of infections
 ```{r}
@@ -476,11 +496,10 @@ sum(diploid_phyto_infected$Phyto=="high")
 sum(diploid_phyto_infected$Phyto=="low")
 
 ###mal secco
-###DED
 diploid_mals_infected=diploid_infections %>% 
   filter(MalS != "uninfected")
 nrow(diploid_mals_infected)
-#17
+#18
 sum(diploid_mals_infected$MalS=="high")
 sum(diploid_mals_infected$MalS=="low")
 
@@ -492,7 +511,7 @@ sum(diploid_mals_infected$MalS=="low")
 polyploid_DED_infected=polyploid_infections %>% 
   filter(DED != "uninfected")
 nrow(polyploid_DED_infected)
-#48
+#47
 sum(polyploid_DED_infected$DED=="high")
 sum(polyploid_DED_infected$DED=="low")
 
@@ -509,7 +528,184 @@ sum(polyploid_phyto_infected$Phyto=="low")
 polyploid_mals_infected=polyploid_infections %>% 
   filter(MalS != "uninfected")
 nrow(polyploid_mals_infected)
-#104
+#105
 sum(polyploid_mals_infected$MalS=="high")
 sum(polyploid_mals_infected$MalS=="low")
+```
+#### random filtering
+```{r, include=FALSE}
+NA_samples=all_infections %>% 
+  filter(str_detect(Sample, "NA"))
+
+extractions=read.csv("Elm DNA Extraction Log - Field Collections.csv", header = TRUE)
+extractions=extractions %>% 
+  rename(Sample=CBG.Sample.ID)
+
+NA_samples2=left_join(NA_samples, extractions, by = "Sample")
+
+NA_for_export=NA_samples2 %>% 
+  select(Sample, Outside.ID, DED, Phyto, MalS, Lat, Long, ploidy, infection_status, Origin)
+
+write.csv(NA_for_export, "C:/Users/mquig/Downloads/NA_samples.csv")
+```
+
+## Upset plot
+Suzy recommended I try an upset plot to visualize the disease presence over time. I think this would be a great way to show the infection rates over the years and the number of samples collected over time. 
+
+I am using this tutorial (https://albert-rapp.de/posts/ggplot2-tips/26_upset_charts/26_upset_charts.html), specifically the part where we make each plot independently then combine them.
+
+### Plot 1) number of samples over time
+For this we have two options, the cumulative number of samples over time, or just the number of samples collected during that time frame.
+```{r, include=TRUE}
+###make a dataframe with 10 year intervals
+binned_10yr <- cumsum_diseases2 %>%
+  mutate(
+    Year_bin = case_when(
+      Year >= 1842 & Year <= 1850 ~ "1842-1850",
+      Year >= 1851 & Year <= 1860 ~ "1851-1860",
+      Year >= 1861 & Year <= 1870 ~ "1861-1870",
+      Year >= 1871 & Year <= 1880 ~ "1871-1880",
+      Year >= 1881 & Year <= 1890 ~ "1881-1890",
+      Year >= 1891 & Year <= 1900 ~ "1891-1900",
+      Year >= 1901 & Year <= 1910 ~ "1901-1910",
+      Year >= 1911 & Year <= 1920 ~ "1911-1920",
+      Year >= 1921 & Year <= 1930 ~ "1921-1930",
+      Year >= 1931 & Year <= 1940 ~ "1931-1940",
+      Year >= 1941 & Year <= 1950 ~ "1941-1950",
+      Year >= 1951 & Year <= 1960 ~ "1951-1960",
+      Year >= 1961 & Year <= 1970 ~ "1961-1970",
+      Year >= 1971 & Year <= 1980 ~ "1971-1980",
+      Year >= 1981 & Year <= 1990 ~ "1981-1990",
+      Year >= 1991 & Year <= 2000 ~ "1991-2000",
+      Year >= 2001 & Year <= 2010 ~ "2001-2010",
+      Year >= 2011 & Year <= 2020 ~ "2011-2020",
+      Year >= 2021 & Year <= 2025 ~ "2021-2025")) %>%
+  group_by(Year_bin) %>%
+  summarise(
+    sum_DED   = sum(sum_DED),
+    sum_EY    = sum(sum_EY),
+    sum_MalS  = sum(sum_MalS),
+    num_samples = sum(num_samples),
+    .groups = "drop") %>% 
+  mutate(cumsum=cumsum(num_samples))
+
+### plot number of samples
+ggplot(binned_10yr, aes(x = Year_bin, y = num_samples)) +
+  geom_col() +
+    labs(
+    x = "Year of Sample Collection",
+    y = "Number of Samples") +
+  theme_classic() +
+  theme(axis.text.x = element_text(angle = 45, hjust = 1),
+        legend.position = c(0.05, 0.95),
+        legend.justification = c("left", "top"),
+        legend.background = element_rect(fill = "white", color = "black"))
+
+### how about adding a line for cumulative number of samples?
+ggplot(binned_10yr, aes(x = Year_bin)) + 
+  geom_col(aes(y = num_samples), fill = "grey70") + 
+  geom_line(aes(y = cumsum), group = 1, color = "cornflowerblue", linewidth = 1) + 
+  geom_point(aes(y = cumsum), color = "cornflowerblue", size = 2) + 
+  #scale_y_continuous( name = "Number of Samples", sec.axis = sec_axis(~ ., name = "Cumulative Samples") ) + 
+  labs(x = "Year of Sample Collection", y = "Number of Samples") + 
+  theme_classic() + 
+  theme( axis.text.x = element_text(angle = 45, hjust = 1) )
+
+
+#plot cumulative number of samples
+ggplot(binned_10yr, aes(x = Year_bin, y = cumsum)) +
+  geom_col() +
+    labs(
+    x = "Year of Sample Collection",
+    y = "Cumulative Number of Samples") +
+  theme_classic() +
+  theme(axis.text.x = element_text(angle = 45, hjust = 1),
+        legend.position = c(0.05, 0.95),
+        legend.justification = c("left", "top"),
+        legend.background = element_rect(fill = "white", color = "black"))
+
+### add a symbol denoting the first records of infection
+first_id=tibble(
+  disease=c("DED", "ElmYellows", "MalSecco"),
+  Year_bin=c("1931-1940", "1881-1890", "2021-2025"))
+first_id2=first_id %>% 
+  left_join(binned_10yr, by = "Year_bin")
+
+## graph it
+ggplot(binned_10yr, aes(x = Year_bin, y = num_samples)) +
+  geom_col(fill="grey30") +
+  geom_point(data = first_id2,
+             aes(x = Year_bin, y = num_samples + 7, color = disease),
+             size = 5, shape = 17) +
+  labs(x = "Year of Sample Collection", y = "Number of Samples", 
+       color = "Earliest Record") +
+  theme_classic() +
+  theme(
+    axis.text.x = element_text(angle = 45, hjust = 1),
+    legend.position = c(0.05, 0.95),
+    legend.justification = c("left", "top"),
+    legend.background = element_rect(fill = "white", color = "black"))+
+  scale_color_manual(values = c("purple4", "springgreen4", "cornflowerblue"))
+
+```
+### Plot 2) Infection status
+Now I want to do the little circles for infection status.
+```{r}
+### convert to long format
+binned_10yr_long <- binned_10yr %>%
+  rename(DED=sum_DED) %>% 
+  rename(ElmYellows=sum_EY) %>% 
+  rename(MalSecco=sum_MalS) %>% 
+  pivot_longer(cols = c(DED, ElmYellows, MalSecco),
+               names_to = "disease",
+               values_to = "count") %>%
+  mutate(filled = count >= 1)
+
+ggplot(binned_10yr_long, aes(x = Year_bin, y = disease)) +
+  geom_point(aes(fill = filled),
+             shape = 21, size = 4) +
+  scale_fill_manual(values = c("white", "black")) +
+  theme_void() +
+  theme(axis.text.x = element_text(angle = 45, hjust = 1),
+        legend.position = "none") +
+  labs(x = "", y = "")
+
+### graph it
+binned_10yr_long <- binned_10yr_long %>%
+  mutate(fill_color = ifelse(filled,
+                             disease,
+                             "none"))
+
+ggplot(binned_10yr_long, aes(x = Year_bin, y = disease)) +
+  geom_point(
+    aes(fill = fill_color),
+    shape = 21, size = 6, color = "black"
+  ) +
+  scale_fill_manual(values = c(
+    "DED"  = "purple4",
+    "ElmYellows"   = "springgreen4",
+    "MalSecco" = "cornflowerblue",
+    "none" = "white"
+  )) +
+  theme_void() +
+  theme(
+    axis.text.x = element_text(angle = 45, hjust = 1),
+    legend.position = "none"
+  ) +
+  labs(x = "", y = "")
+```
+### Plot 3) Sideways bar graph of infected individuals
+```{r}
+#make the dataframe
+total_infect=binned_10yr %>% 
+  summarise(DED = sum(sum_DED), 
+            ElmYellows = sum(sum_EY, na.rm = TRUE), 
+            MalSecco = sum(sum_MalS, na.rm = TRUE)) %>%
+  pivot_longer(everything(), names_to = "disease", values_to = "total_infections")
+
+#graph it
+ggplot(total_infect, aes(x = total_infections, y = disease)) +
+  geom_col(fill = c("purple4", "springgreen4", "cornflowerblue")) +
+  theme_classic() +
+  labs(x = "Number of Infections", y="") 
 ```
