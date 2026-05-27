@@ -1,0 +1,369 @@
+---
+title: "Mal Secco ITS Phylogeny"
+author: "m quigg"
+date: "2026-05-06"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+# Phylogeny of Mal Secco
+### The goal here is to make a phylogeny of the gene regions originating from the Mal Secco pathogens. I used all of the "infected" individuals and generated the phylogeny from that.
+
+## Prep
+```{r include=FALSE}
+### grab your library card ###
+library(ggtree)
+library(ape)
+library(treeio)
+library(tidyverse)
+library(janitor)
+library(Biostrings)
+library(patchwork)
+library(tidytree)
+
+
+### set working directory ###
+setwd("C:/Users/mquig/Desktop/DED/Data_analysis/disease_phylo/mal_secco")
+```
+
+## Import the Data
+```{r}
+###the important stuff
+tree_ITS = treeio::read.tree("aligned.fa.treefile")
+
+###the fun stuff
+coords=read.csv("/Users/mquig/Desktop/DED/Data_analysis/disease/master_list_NA_updated.csv", header = T)
+year=read.csv("/Users/mquig/Desktop/DED/Data_analysis/disease/samples_and_year.csv", header = T)
+
+###clean up the fun stuff
+year = year %>% 
+  dplyr::rename("SampleID" = ind)
+coords = coords %>% 
+  select(Sample.ID, Lat.NA_corrected., Long.NA_corrected.) %>% 
+  dplyr::rename("SampleID" = Sample.ID, "Latitude" = Lat.NA_corrected., "Longitude" = Long.NA_corrected.)
+```
+
+## ITS Gene Region: Create the Phylogeny
+### Add a Root
+```{r}
+rooted_tree_ITS=root(tree_ITS, outgroup = "PQ351261")
+```
+
+### Graph it
+#### Basic tree
+```{r}
+ggtree(tree_ITS, branch.length = "none", layout = "circular")
+```
+### Add Metadata
+```{r, include=FALSE}
+# Fix the treetips creation - remove the duplicate label column
+treetips_ITS = as.data.frame(tree_ITS$tip.label)
+names(treetips_ITS)[1] = "label"  # keep it as 'label' directly
+
+treetips_ITS = treetips_ITS %>% 
+  mutate(sample_id = label) %>%   # keep original for joining
+  separate(col="sample_id", into=c("SampleID", "batch"), sep="_") %>%
+  select(-batch)
+
+# Join metadata
+treetips_meta_ITS = treetips_ITS %>%
+  left_join(coords, by="SampleID") %>%
+  left_join(year, by="SampleID")
+
+# Check it looks right
+head(treetips_meta_ITS)
+colnames(treetips_meta_ITS)
+```
+
+### Make fun phylogenies!
+```{r}
+###add tip labels
+ggtree(tree_ITS, branch.length="none") +
+  geom_tiplab(color='navy', size=2) +
+  geom_nodelab(size=2, color="red")
+```
+
+## Tree with both ITS and TUB2
+Now I want to make a tree with both the ITS genes and the TUB2 genes.
+```{r}
+tree_both = treeio::read.tree("concatenated_MalS.fasta.treefile")
+
+###add a root
+rooted_tree_both=root(tree_both, outgroup = "PQ351261_OQ412812")
+```
+
+### Graph it
+#### Basic tree
+```{r}
+ggtree(rooted_tree_both, branch.length = "none", layout = "circular")
+
+ggtree(rooted_tree_both, branch.length="none") +
+  geom_tiplab(color='navy', size=2)
+
+###make a tree with bootstrap numbers
+ggtree(rooted_tree_both, branch.length='none', linewidth=0.5) +
+      geom_nodelab(size=2, color="red") +
+      geom_tiplab(color='navy', size=2)
+```
+OH MY GOD!!! It looks like we have two strains??? There are def two clades emerging, and that initial split has a high bootstrap level. Within clades is a little messy, with low bootstrpping but that initial split seems pretty confident.
+
+Now I want to compare spatially, and temporally.
+
+### Add the metadata
+```{r, include=FALSE}
+# Fix the treetips creation - remove the duplicate label column
+treetips_both = as.data.frame(tree_both$tip.label)
+names(treetips_both)[1] = "label"  # keep it as 'label' directly
+
+treetips_both = treetips_both %>% 
+  mutate(sample_id = label) %>%   # keep original for joining
+  separate(col="sample_id", into=c("SampleID", "batch"), sep="_") %>%
+  select(-batch)
+
+# Join metadata
+treetips_meta_both = treetips_both %>%
+  left_join(coords, by="SampleID") %>%
+  left_join(year, by="SampleID")
+
+# Check it looks right
+head(treetips_meta_both)
+colnames(treetips_meta_both)
+```
+
+
+### Spatial
+*a quick note: the coords here have the NatArb trees at the plot in Maryland. There are two possibilities, one is that they got infected at the NatArb, the other is that they were already infected before reaching the NatArb. It looks like both may be happening... There are two groups to NatArb trees, one in each clade!
+
+#### Latitude
+The goal is to make a phylogeny where the colors of the tips correspond to the latitude the sample was taken from.
+```{r}
+###create the color palette 
+lat_min <- min(treetips_meta_both$Latitude, na.rm=TRUE)
+lat_max <- max(treetips_meta_both$Latitude, na.rm=TRUE)
+
+###graph the cladogram
+tree_plot <- ggtree(rooted_tree_both, branch.length='none') %<+% treetips_meta_both +
+    geom_tippoint(aes(color=Latitude), size=2) +
+    scale_color_gradient(low="lightblue", high="darkblue", na.value="grey50")
+tree_plot
+
+###make the map
+us_map <- map_data("state")
+
+map_data_pts <- treetips_meta_both %>%
+    filter(!is.na(Latitude), !is.na(Longitude))
+
+map_plot <- ggplot() +
+    geom_polygon(data=us_map, aes(x=long, y=lat, group=group),
+                 fill="lightgrey", color="white", linewidth=0.3) +
+    geom_point(data=map_data_pts,
+               aes(x=Longitude, y=Latitude, color=Latitude),
+               size=3, alpha=0.8) +
+    scale_color_gradient(
+        low="lightblue", high="darkblue",
+        name="Latitude"
+    ) +
+    coord_fixed(1.3, xlim=c(-125, -65), ylim=c(24, 50)) +
+    theme_void() +
+    theme(panel.border=element_rect(color="black", fill=NA, linewidth=0.5), legend.position="none")
+map_plot
+
+###combine
+tree_plot + inset_element(map_plot, left=0.0, bottom=0.7, right=0.3, top=1.0)
+```
+
+####Longitude
+The goal is to make a phylogeny where the colors of the tips correspond to the longitude the sample was taken from.
+```{r}
+###create the color palette 
+long_min <- min(treetips_meta_both$Longitude, na.rm=TRUE)
+long_max <- max(treetips_meta_both$Longitude, na.rm=TRUE)
+
+###graph the cladogram
+tree_plot_long <- ggtree(rooted_tree_both, branch.length='none') %<+% treetips_meta_both +
+    geom_tippoint(aes(color=Longitude), size=2) +
+    scale_color_gradient(low="lightgreen", high="darkgreen", na.value="grey50")
+tree_plot_long
+
+###make the map
+us_map <- map_data("state")
+
+map_data_pts <- treetips_meta_both %>%
+    filter(!is.na(Latitude), !is.na(Longitude))
+
+map_plot_long <- ggplot() +
+    geom_polygon(data=us_map, aes(x=long, y=lat, group=group),
+                 fill="lightgrey", color="white", linewidth=0.3) +
+    geom_point(data=map_data_pts,
+               aes(x=Longitude, y=Latitude, color=Longitude),
+               size=3, alpha=0.8) +
+    scale_color_gradient(
+        low="lightgreen", high="darkgreen",
+        name="Longitude"
+    ) +
+    coord_fixed(1.3, xlim=c(-125, -65), ylim=c(24, 50)) +
+    theme_void() +
+    theme(panel.border=element_rect(color="black", fill=NA, linewidth=0.5), legend.position="none")
+map_plot_long
+
+###combine
+tree_plot_long + inset_element(map_plot_long, left=0.0, bottom=0.7, right=0.3, top=1.0)
+```
+
+####Year
+The goal is to make a phylogeny where the colors of the tips correspond to the longitude the sample was taken from.
+```{r}
+###create the color palette 
+year_min <- min(treetips_meta_both$year, na.rm=TRUE)
+year_max <- max(treetips_meta_both$year, na.rm=TRUE)
+
+###graph the cladogram
+tree_plot_year <- ggtree(rooted_tree_both, branch.length='none') %<+% treetips_meta_both +
+    geom_tippoint(aes(color=year), size=2) +
+    scale_color_gradient(low="#FF99CC", high="#660033", na.value="grey50")
+tree_plot_year
+
+###make the map
+us_map <- map_data("state")
+
+map_data_pts <- treetips_meta_both %>%
+    filter(!is.na(Latitude), !is.na(Longitude))
+
+map_plot_year <- ggplot() +
+    geom_polygon(data=us_map, aes(x=long, y=lat, group=group),
+                 fill="lightgrey", color="white", linewidth=0.3) +
+    geom_point(data=map_data_pts,
+               aes(x=Longitude, y=Latitude, color=year),
+               size=3, alpha=0.8) +
+    scale_color_gradient(
+        low="#FF99CC", high="#660033",
+        name="Year"
+    ) +
+    coord_fixed(1.3, xlim=c(-125, -65), ylim=c(24, 50)) +
+    theme_void() +
+    theme(panel.border=element_rect(color="black", fill=NA, linewidth=0.5), legend.position="none")
+map_plot_year
+
+###combine
+tree_plot_year + inset_element(map_plot_year, left=0.0, bottom=0.7, right=0.3, top=1.0)
+```
+### Assign Clades
+Ok so there are 2 clades. I need to assign each individual to one of the two main clades.
+```{r}
+###plot with clade numbers
+ggtree(rooted_tree_both, branch.length='none', linewidth=0.5) +
+    geom_text(aes(label=node), size=2, color="red") 
+#clade 1 is 127 and clade 2 is 183
+
+###extract individuals in each clade
+clade1_tips <- extract.clade(rooted_tree_both, node=127)$tip.label
+clade2_tips <- extract.clade(rooted_tree_both, node=183)$tip.label
+
+###make a dataframe
+clade1=data.frame(SampleID = clade1_tips)
+clade1=clade1 %>% 
+  mutate(clade = "1")
+
+clade2=data.frame(SampleID = clade2_tips)
+clade2=clade2 %>% 
+  mutate(clade = "2")
+
+clade_assignments=rbind(clade1, clade2)
+
+###add coords
+clade_coords=clade_assignments %>% 
+  separate(SampleID, into = c("SampleID", "batch"), sep = "_") 
+clade_coords=left_join(clade_coords, coords, by = "SampleID")
+clade_coords_year=left_join(clade_coords, year, by = "SampleID")
+
+###write csv to map in arcGIS
+#write.csv(clade_coords_year, "MalS_clade_coords.csv")
+```
+
+### Final figure
+I want to make a map where the shape of the points corresponds to the clade, and the color of the points is the year the sample was collected in. 
+```{r}
+###make the dataframe for the figure
+treetips_final=clade_coords_year %>% 
+  unite("SampleID", SampleID, batch, sep = "_")
+
+###make the tree
+tree_final=ggtree(rooted_tree_both, branch.length='none') %<+% treetips_final +
+    geom_tippoint(aes(color=year, shape = clade), size=2) +
+    scale_color_gradient(low="lightblue", high="darkblue", na.value="grey50")
+tree_final
+
+###make the map
+us_map <- map_data("state")
+
+map_data_pts <- treetips_final %>%
+    filter(!is.na(Latitude), !is.na(Longitude))
+
+map_plot_final <- ggplot() +
+    geom_polygon(data=us_map, aes(x=long, y=lat, group=group),
+                 fill="white", color="darkgrey", linewidth=0.3) +
+    geom_point(data=map_data_pts,
+               aes(x=Longitude, y=Latitude, color=year, shape = clade),
+               size=3, alpha=1) +
+    scale_color_gradient(
+        low="lightblue", high="darkblue",
+        name="Year"
+    ) +
+    coord_fixed(1.3, xlim=c(-125, -65), ylim=c(24, 50)) +
+    theme_void() +
+    theme(panel.border=element_rect(color="black", fill=NA, linewidth=0.5), legend.position="none")
+map_plot_final
+
+tree_final + inset_element(map_plot_final, left=0.0, bottom=0.7, right=0.3, top=1.0)
+```
+
+#### Boxplot: clades and years
+I have an idea! What about a boxplot with both clades by year? That can show the variation of time!
+```{r}
+### make a dataframe
+clade_year=clade_coords_year %>% 
+  select(SampleID, clade, year) %>% 
+  group_by(clade)
+
+###graph it
+ggplot(clade_year, aes(clade, year)) +
+  geom_boxplot(fill = c("darkblue", "lightblue")) +
+  theme_classic() +
+  ylab("Year") + xlab("Clade") +
+  theme(panel.border = element_rect(colour = "black", fill = NA, linewidth = 1))
+```
+
+```{r}
+###make the dataframe for the figure
+treetips_final=clade_coords_year %>% 
+  unite("SampleID", SampleID, batch, sep = "_")
+
+###make the tree
+tree_clade_color=ggtree(rooted_tree_both, branch.length='none') %<+% treetips_final +
+    geom_tippoint(aes(color=clade), size=2) +
+    scale_color_manual(values = c("1" ="darkblue", "2" = "lightblue", na.value="grey50"))
+tree_clade_color
+
+###make the map
+us_map <- map_data("state")
+
+map_data_pts <- treetips_final %>%
+    filter(!is.na(Latitude), !is.na(Longitude))
+
+map_plot_clade_color <- ggplot() +
+    geom_polygon(data=us_map, aes(x=long, y=lat, group=group),
+                 fill="white", color="black", linewidth=0.3) +
+    geom_point(data=map_data_pts,
+               aes(x=Longitude, y=Latitude, color=clade),
+               size=3, alpha=1) +
+    scale_color_manual(values=c("1"="darkblue", "2"="lightblue")) +  # <-- color not fill
+    coord_fixed(1.3, xlim=c(-125, -65), ylim=c(24, 50)) +
+    theme_void() +
+    theme(panel.border=element_rect(color="black", fill=NA, linewidth=0.5), 
+          legend.position="none")
+
+tree_clade_color + inset_element(map_plot_clade_color, left=0.0, bottom=0.7, right=0.3, top=1.0)
+```
